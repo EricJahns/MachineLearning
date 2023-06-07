@@ -21,7 +21,7 @@ class Dataset(torch.utils.data.Dataset):
         self.csv = self.csv[self.csv['dataset'] == self.type]
 
     def __len__(self):
-        return int(len(self.csv)/10)
+        return int(len(self.csv))
 
     def __getitem__(self, index):
         image_name = self.csv.iloc[index, 0]

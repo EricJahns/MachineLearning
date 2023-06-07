@@ -1,13 +1,11 @@
 from model.UNet import UNet
 from model.UUNet import UUNet
-from model.train import Trainer
+from model.Trainer import Trainer
 from model.DiceLoss import DiceLoss
 from dataset.Dataset import Dataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torch import nn
 from matplotlib import pyplot as plt
-import numpy as np
 import torch
 
 torch.manual_seed(42)
@@ -15,9 +13,9 @@ torch.manual_seed(42)
 def main():
     """ Main function """
     # Create UNet model
-    model_name = "UUNet"
+    model_name = "UNet"
     
-    model = UUNet()
+    model = UNet()
     # model.load_weights('./model/weights/UUNet.pth')
 
     training_transforms = transforms.Compose([
@@ -125,7 +123,7 @@ def compare():
     plt.savefig("Comparison.png")
 
 if __name__ == "__main__":
-    # main()
+    main()
     # predict()
-    compare()
+    # compare()
     

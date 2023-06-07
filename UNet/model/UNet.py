@@ -24,6 +24,8 @@ class UNet(nn.Module):
         """ Classifier """
         self.classifier = nn.Conv2d(64, 1, kernel_size=1, padding=0)
 
+        self.sigmoid = nn.Sigmoid()
+
     def forward(self, x):
         s1, p1 = self.enc1(x)
         s2, p2 = self.enc2(p1)
@@ -37,7 +39,7 @@ class UNet(nn.Module):
         d3 = self.dec3(d2, s2)
         d4 = self.dec4(d3, s1)
         
-        return self.classifier(d4)
+        return self.sigmoid(self.classifier(d4))
     
     def predict(self, image, out_threshold=0.5):
         self.eval()
@@ -57,9 +59,9 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ConvBlock, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 

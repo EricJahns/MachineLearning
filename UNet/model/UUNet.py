@@ -42,6 +42,8 @@ class UUNet(nn.Module):
 
         self.classifier = nn.Conv2d(64, 1, kernel_size=1, padding=0)
 
+        self.sigmoid = nn.Sigmoid()
+
     def forward(self, x):
         s1, p1 = self.enc1(x)
         s2, p2 = self.enc2(p1)
@@ -69,7 +71,7 @@ class UUNet(nn.Module):
         dC = self.decC(dB, sB)
         dD = self.decD(dC, sA)
         
-        return self.classifier(dD)
+        return self.sigmoid(self.classifier(dD))
     
     def predict(self, image, out_threshold=0.5):
         self.eval()
