@@ -1,0 +1,6 @@
+*.pth
+*.pyc
+*.gz
+
+# ignore all extensionless files
+
