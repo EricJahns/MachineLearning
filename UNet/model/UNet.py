@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class UNet(nn.Module):
-    def __init__(self):
+    def __init__(self, name='UNet'):
         super(UNet, self).__init__()
+        self.name = name
 
         """ Encoder """
         self.enc1 = EncoderBlock(3, 64)

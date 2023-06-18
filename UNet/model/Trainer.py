@@ -1,25 +1,21 @@
 import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
-from torch.cuda.amp import autocast, GradScaler
 from .UNet import UNet
 from .Metrics import Metrics
 from tqdm import tqdm, trange
 import pandas as pd
+import numpy as np
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 metrics = Metrics()
 
-class Trainer():
-    def __init__(self, model:UNet, training_loader:DataLoader, validation_loader:DataLoader, testing_loader:DataLoader, optimizer:Optimizer, criterion):
+class UNetTrainer():
+    def __init__(self, model:UNet, optimizer:Optimizer, criterion):
         self.model = model
-        self.training_loader = training_loader
-        self.validation_loader = validation_loader
-        self.testing_loader = testing_loader
         self.optimizer = optimizer
         self.criterion = criterion
-        self.scaler = GradScaler()
 
         self.log = {
             'epoch': [],
@@ -33,59 +29,66 @@ class Trainer():
             'validation_dice_score': []
         }
 
-    def train(self, epochs, model_name, log_dir=None):
+    def train(self, epochs:int, model_name:str, train_loader:DataLoader, validation_loader:DataLoader, test_loader:DataLoader=None, log_dir=None,):
         print(f"Training {model_name}")
         self.model = self.model.to(DEVICE)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=2, verbose=True)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=epochs//2, T_mult=1, eta_min=1e-6, last_epoch=-1)
 
         for epoch in trange(1, epochs+1):
             tqdm.write(f'Epoch: {epoch}')
             self.log['epoch'].append(epoch)
 
-            loss = self.step()
-            scheduler.step(loss)
+            loss = self.step(train_loader)
             self.log['train_loss'].append(loss)
 
-            validation_loss = self.validate()
+            scheduler.step(loss)
+
+            validation_loss = self.validate(validation_loader)
             self.log['validation_loss'].append(validation_loss)
 
             tqdm.write(f'Train Loss: {loss : .6f} | Val Loss: {validation_loss : .6f}')
             tqdm.write("")
+
+        if test_loader:
+            loss = self.test(test_loader)
+            tqdm.write(f'Test Loss: {loss : .6f}')
 
         self.model.save_weights(f'./model/weights/{model_name}.pth')
 
         if log_dir:
             self.save_log(log_dir)
 
-    def step(self):
+    def step(self, train_loader:DataLoader):
         self.model.train()
 
+        metrics = np.zeros(3, dtype=np.float64)
+
         running_loss: float = 0
-        for _, (image, mask) in enumerate(self.training_loader):
+        for _, (image, mask) in enumerate(train_loader):
             image, mask = image.to(DEVICE), mask.to(DEVICE)
 
             self.optimizer.zero_grad(set_to_none=True)
 
-            with autocast(dtype=torch.float16):
-                output = self.model(image)
-                loss = self.criterion(output, mask)
+            output = self.model(image)
+            loss = self.criterion(output, mask)
 
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            loss.backward()
+            self.optimizer.step()
 
             running_loss += loss.item()
+            metrics = np.add(metrics, self.step_metrics(mask.cpu(), output.cpu().detach()))
 
-        self.step_training_metrics(mask.cpu().numpy(), output.cpu().detach().numpy())
-        
-        return running_loss / len(self.training_loader)
+        self.record_training_metrics(np.divide(metrics, len(train_loader)))
+        return running_loss / len(train_loader)
 
-    def validate(self):
+    def validate(self, validation_loader:DataLoader):
         self.model.eval()
+
+        metrics = np.zeros(3)
 
         running_loss: float = 0
         with torch.no_grad():
-            for _, (image, mask) in enumerate(self.validation_loader):
+            for _, (image, mask) in enumerate(validation_loader):
                 image, mask = image.to(DEVICE), mask.to(DEVICE)
 
                 output = self.model(image)
@@ -94,15 +97,16 @@ class Trainer():
 
                 running_loss += loss.item()
 
-        self.step_validation_metrics(mask.cpu().numpy(), output.cpu().detach().numpy())
+                metrics = np.add(metrics, self.step_metrics(mask.cpu(), output.cpu().detach()))
 
-        return running_loss / len(self.validation_loader)
+        self.record_validation_metrics(np.divide(metrics, len(validation_loader)))
+        return running_loss / len(validation_loader)
     
-    def test(self):
+    def test(self, test_loader:DataLoader):
         running_loss: float = 0
 
         with torch.no_grad():
-            for _, (image, mask) in enumerate(self.testing_loader):
+            for _, (image, mask) in enumerate(test_loader):
                 image, mask = image.to(DEVICE), mask.to(DEVICE)
 
                 output = self.model(image)
@@ -111,35 +115,31 @@ class Trainer():
 
                 running_loss += loss.item()
 
-        return running_loss / len(self.testing_loader)
+        return running_loss / len(test_loader)
+
+    def step_metrics(self, y_true, y_pred):
+        self.model.eval()
+
+        with torch.no_grad():
+            pixel_accuracy = metrics.pixel_accuracy(y_true, y_pred)
+            IoU = metrics.IoU(y_true, y_pred)
+            dice_score = metrics.dice_score(y_true, y_pred)
+
+        return np.array([pixel_accuracy, IoU, dice_score])
     
-    def step_validation_metrics(self, y_true, y_pred):
-        self.model.eval()
+    def record_training_metrics(self, metrics: np.ndarray):
+        self.log['train_pixel_accuracy'].append(metrics[0])
+        self.log['train_IoU'].append(metrics[1])
+        self.log['train_dice_score'].append(metrics[2])
 
-        with torch.no_grad():
-            pixel_accuracy = metrics.pixel_accuracy(y_true, y_pred)
-            IoU = metrics.IoU(y_true, y_pred)
-            dice_score = metrics.dice_score(y_true, y_pred)
+        tqdm.write(f'Train Pixel Accuracy: {metrics[0] : .3f} | Train IoU: {metrics[1] : .3f} | Train Dice Score: {metrics[2] : .3f}')
 
-        self.log['validation_pixel_accuracy'].append(pixel_accuracy)
-        self.log['validation_IoU'].append(IoU)
-        self.log['validation_dice_score'].append(dice_score)
+    def record_validation_metrics(self, metrics: np.ndarray):
+        self.log['validation_pixel_accuracy'].append(metrics[0])
+        self.log['validation_IoU'].append(metrics[1])
+        self.log['validation_dice_score'].append(metrics[2])
 
-        tqdm.write(f'Val   Pixel Accuracy: {pixel_accuracy : .3f} | Val   IoU: {IoU : .3f} | Val   Dice Score: {dice_score : .3f}')
-
-    def step_training_metrics(self, y_true, y_pred):
-        self.model.eval()
-
-        with torch.no_grad():
-            pixel_accuracy = metrics.pixel_accuracy(y_true, y_pred)
-            IoU = metrics.IoU(y_true, y_pred)
-            dice_score = metrics.dice_score(y_true, y_pred)
-
-        self.log['train_pixel_accuracy'].append(pixel_accuracy)
-        self.log['train_IoU'].append(IoU)
-        self.log['train_dice_score'].append(dice_score)
-
-        tqdm.write(f'Train Pixel Accuracy: {pixel_accuracy : .3f} | Train IoU: {IoU : .3f} | Train Dice Score: {dice_score : .3f}')
+        tqdm.write(f'Val   Pixel Accuracy: {metrics[0] : .3f} | Val   IoU: {metrics[1] : .3f} | Val   Dice Score: {metrics[2] : .3f}')
     
     def save_log(self, log_dir):
         log = pd.DataFrame(self.log)
