@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-import numpy as np
-from cprint import cprint
 
 class Weierstrass(nn.Module):
     def __init__(self, a=0.5, b=10):
