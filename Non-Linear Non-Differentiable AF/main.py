@@ -22,14 +22,14 @@ def main():
     net_optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     
     weierstrass_net = WeierstrassNetwork()
-    weierstrass_net.weight_init()
+    # weierstrass_net.weight_init()
     weierstrass_optimizer = torch.optim.Adam(weierstrass_net.parameters(), lr=0.001)
 
     criterion = nn.CrossEntropyLoss()
     epochs = 3
 
     # train the network
-    net.train(epochs, train_set, validation_set, net_optimizer, criterion)
+    # net.train(epochs, train_set, validation_set, net_optimizer, criterion)
 
     # train the weierstrass network
     weierstrass_net.train(epochs, train_set, validation_set, weierstrass_optimizer, criterion)

@@ -5,10 +5,15 @@ from Weierstrass import Weierstrass
 class WeierstrassNetwork(nn.Module):
     def __init__(self):
         super(WeierstrassNetwork, self).__init__()
-        self.fc1 = nn.Linear(784, 100)
-        self.fc2 = nn.Linear(100, 10)
-        self.fc3 = nn.Linear(10, 10)
-        self.weierstrass = Weierstrass()
+        self.layers = nn.Sequential(
+            nn.Linear(784, 100),
+            Weierstrass(),
+            nn.Linear(100, 100),
+            nn.LeakyReLU(),
+            nn.Linear(100, 10),
+            nn.LeakyReLU(),
+            nn.Linear(10, 10)
+        )
 
     def weight_init(self):
         for m in self._modules:
@@ -18,12 +23,7 @@ class WeierstrassNetwork(nn.Module):
 
     def forward(self, x):
         x = x.view(-1, 784)
-        x = self.fc1(x)
-        x = self.weierstrass(x)
-        x = self.fc2(x)
-        x = self.weierstrass(x)
-        x = self.fc3(x)
-        return x
+        return self.layers(x)
     
     def train(self, epochs, training_set, validation_set, optimizer, criterion):
         train_loss: float
