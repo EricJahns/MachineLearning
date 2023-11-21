@@ -2,14 +2,13 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.cuda.amp import autocast, GradScaler
-from .UNet import UNet
 from tqdm import tqdm, trange
 import pandas as pd
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Trainer():
-    def __init__(self, model:UNet, training_loader:DataLoader, validation_loader:DataLoader, testing_loader:DataLoader, optimizer:Optimizer, criterion):
+    def __init__(self, model, training_loader:DataLoader, validation_loader:DataLoader, testing_loader:DataLoader, optimizer:Optimizer, criterion):
         self.model = model
         self.training_loader = training_loader
         self.validation_loader = validation_loader
